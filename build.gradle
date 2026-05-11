@@ -1,0 +1,22 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'net.dv8tion:JDA:6.4.1'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+application {
+    mainClass = 'fr.citedesiles.discordbot.DiscordBot'
+}
