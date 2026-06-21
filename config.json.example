@@ -1,0 +1,5 @@
+{
+  "discord_token": "TON_TOKEN_DISCORD_ICI",
+  "core_api_url": "http://localhost:3000",
+  "core_api_token": "bipboup"
+}

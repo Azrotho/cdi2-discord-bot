@@ -39,3 +39,6 @@ replay_pid*
 *.zip
 *.tar.gz
 *.rar
+
+# Configuration
+config.json

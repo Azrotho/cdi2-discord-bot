@@ -11,6 +11,7 @@ repositories {
 dependencies {
     implementation 'net.dv8tion:JDA:6.4.1'
     implementation 'fr.citedesiles:cdi2-core-plugin:1.0.0'
+    implementation 'com.google.code.gson:gson:2.13.1'
 }
 
 java {
