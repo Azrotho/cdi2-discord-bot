@@ -55,13 +55,38 @@ public class DiscordBot {
         try {
             var jda = JDABuilder.createLight(token, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
                     .setActivity(Activity.playing("sur Cité des Îles"))
-                    .addEventListeners(new LinkCommandListener(api))
+                    .addEventListeners(new LinkCommandListener(api), new fr.citedesiles.discordbot.listener.TeamCommandListener(api))
                     .build();
 
-            // Enregistrer la commande slash /link
-            jda.upsertCommand("link", "Lie ton compte Minecraft à Discord")
-                    .addOption(OptionType.STRING, "code", "Code reçu en jeu avec /link", true)
-                    .queue();
+            // Enregistrer globalement les commandes en écrasant les anciennes (Clean)
+            jda.updateCommands().addCommands(
+                    net.dv8tion.jda.api.interactions.commands.build.Commands.slash("link", "Lie ton compte Minecraft à Discord")
+                            .addOption(OptionType.STRING, "code", "Code reçu en jeu avec /link", true),
+                    net.dv8tion.jda.api.interactions.commands.build.Commands.slash("team", "Gère ton équipe Cité des Îles")
+                            .addSubcommands(
+                                    new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("create", "Crée une nouvelle équipe")
+                                            .addOption(OptionType.STRING, "nom", "Le nom de l'équipe", true)
+                                            .addOption(OptionType.STRING, "tag", "Le tag de l'équipe (3 ou 4 caractères)", true),
+                                    new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("invite", "Invite un joueur dans ton équipe")
+                                            .addOption(OptionType.USER, "joueur", "Le joueur Discord à inviter", true),
+                                    new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("leave", "Quitte ton équipe actuelle"),
+                                    new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("kick", "Exclut un membre de ton équipe")
+                                            .addOption(OptionType.USER, "joueur", "Le membre de ton équipe à exclure", true),
+                                    new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("transfer", "Transfère la direction de l'équipe à un autre membre")
+                                            .addOption(OptionType.USER, "joueur", "Le membre à promouvoir leader", true),
+                                    new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("info", "Affiche les informations d'une équipe")
+                                            .addOption(OptionType.USER, "joueur", "Affiche l'équipe de ce joueur", false)
+                                            .addOption(OptionType.STRING, "nom_ou_tag", "Affiche l'équipe par son nom ou son tag", false),
+                                    new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("edit", "Modifie les détails de ton équipe")
+                                            .addOptions(
+                                                    new net.dv8tion.jda.api.interactions.commands.build.OptionData(OptionType.STRING, "champ", "Le champ à modifier", true)
+                                                            .addChoice("Nom", "name")
+                                                            .addChoice("Tag", "tag")
+                                                            .addChoice("Couleur", "color"),
+                                                    new net.dv8tion.jda.api.interactions.commands.build.OptionData(OptionType.STRING, "valeur", "La nouvelle valeur", true)
+                                            )
+                            )
+            ).queue();
 
             System.out.println("Le bot Discord est connecté !");
         } catch (Exception e) {

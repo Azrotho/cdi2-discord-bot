@@ -23,3 +23,15 @@ java {
 application {
     mainClass = 'fr.citedesiles.discordbot.DiscordBot'
 }
+
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'fr.citedesiles.discordbot.DiscordBot'
+        )
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
