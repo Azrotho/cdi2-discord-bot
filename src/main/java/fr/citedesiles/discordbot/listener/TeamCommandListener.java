@@ -5,6 +5,7 @@ import fr.citedesiles.coreplugin.Player;
 import fr.citedesiles.coreplugin.Team;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -12,9 +13,12 @@ import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import fr.citedesiles.discordbot.DiscordBot;
 
 import java.awt.Color;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -63,6 +67,7 @@ public class TeamCommandListener extends ListenerAdapter {
     }
 
     @Override
+    @SuppressWarnings("null")
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (event.getName().equals("endinscription")) {
             handleEndInscription(event);
@@ -76,7 +81,7 @@ public class TeamCommandListener extends ListenerAdapter {
         if (event.getSubcommandName() == null) return;
 
         String subcommand = event.getSubcommandName();
-        if ((subcommand.equals("create") || subcommand.equals("invite")) && !fr.citedesiles.discordbot.DiscordBot.inscriptionsOuvertes) {
+        if ((subcommand.equals("create") || subcommand.equals("invite")) && !DiscordBot.inscriptionsOuvertes) {
             event.reply("❌ Les inscriptions sont fermées.")
                     .setEphemeral(true).queue();
             return;
@@ -99,8 +104,8 @@ public class TeamCommandListener extends ListenerAdapter {
     }
 
     private void handleCreate(SlashCommandInteractionEvent event) throws HandledException {
-        String name = event.getOption("nom").getAsString();
-        String tag = event.getOption("tag").getAsString().toUpperCase();
+        String name = Objects.requireNonNull(event.getOption("nom"), "nom").getAsString();
+        String tag = Objects.requireNonNull(event.getOption("tag"), "tag").getAsString().toUpperCase();
         String colorStr = String.format("#%06X", new java.util.Random().nextInt(0xFFFFFF + 1));
 
         Player player = getPlayerOrError(event.getUser().getId(), event);
@@ -153,7 +158,7 @@ public class TeamCommandListener extends ListenerAdapter {
     }
 
     private void handleInvite(SlashCommandInteractionEvent event) throws HandledException {
-        User targetUser = event.getOption("joueur").getAsUser();
+        User targetUser = Objects.requireNonNull(event.getOption("joueur"), "joueur").getAsUser();
         if (targetUser.isBot()) {
             event.reply("❌ Tu ne peux pas inviter un bot dans ton équipe.")
                     .setEphemeral(true).queue();
@@ -205,7 +210,7 @@ public class TeamCommandListener extends ListenerAdapter {
                         channel.sendMessage("✉️ **" + player.name() + "** t'invite à rejoindre l'équipe **" + team.name() + "** (`" + team.tag() + "`) sur Cité des Îles !\n"
                                         + "Utilise les boutons ci-dessous pour répondre.")
                                 .setComponents(
-                                        net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                                        ActionRow.of(
                                                 Button.success("team_invite:accept:" + team.id() + ":" + targetPlayer.uuid() + ":" + event.getUser().getId(), "Accepter"),
                                                 Button.danger("team_invite:deny:" + team.id() + ":" + targetPlayer.uuid() + ":" + event.getUser().getId(), "Refuser")
                                         )
@@ -295,7 +300,7 @@ public class TeamCommandListener extends ListenerAdapter {
     }
 
     private void handleKick(SlashCommandInteractionEvent event) throws HandledException {
-        User targetUser = event.getOption("joueur").getAsUser();
+        User targetUser = Objects.requireNonNull(event.getOption("joueur"), "joueur").getAsUser();
         Player player = getPlayerOrError(event.getUser().getId(), event);
         if (player.team() == -1) {
             event.reply("❌ Tu n'es pas dans une équipe.")
@@ -345,7 +350,7 @@ public class TeamCommandListener extends ListenerAdapter {
     }
 
     private void handleTransfer(SlashCommandInteractionEvent event) throws HandledException {
-        User targetUser = event.getOption("joueur").getAsUser();
+        User targetUser = Objects.requireNonNull(event.getOption("joueur"), "joueur").getAsUser();
         Player player = getPlayerOrError(event.getUser().getId(), event);
         if (player.team() == -1) {
             event.reply("❌ Tu n'es pas dans une équipe.")
@@ -392,8 +397,10 @@ public class TeamCommandListener extends ListenerAdapter {
     }
 
     private void handleEdit(SlashCommandInteractionEvent event) throws HandledException {
-        String field = event.getOption("champ").getAsString();
-        String value = event.getOption("valeur").getAsString();
+        OptionMapping champOption = Objects.requireNonNull(event.getOption("champ"), "champ");
+        String field = champOption.getAsString();
+        OptionMapping valeurOption = Objects.requireNonNull(event.getOption("valeur"), "valeur");
+        String value = valeurOption.getAsString();
 
         Player player = getPlayerOrError(event.getUser().getId(), event);
         if (player.team() == -1) {
@@ -569,9 +576,10 @@ public class TeamCommandListener extends ListenerAdapter {
         });
     }
 
+    @SuppressWarnings("null")
     private void handleEndInscription(SlashCommandInteractionEvent event) {
         // Enregistrer que les inscriptions sont fermées
-        fr.citedesiles.discordbot.DiscordBot.setInscriptionsOuvertes(false);
+        DiscordBot.setInscriptionsOuvertes(false);
 
         event.reply("⏳ Fermeture des inscriptions en cours... Nettoyage de la base de données et configuration des salons d'équipes (1 équipe toutes les 5 secondes)...").queue(interactionHook -> {
             new Thread(() -> {
@@ -605,7 +613,7 @@ public class TeamCommandListener extends ListenerAdapter {
                             // Équipe valide : configurer les salons/rôles sur Discord
                             validCount++;
                             
-                            net.dv8tion.jda.api.entities.Guild guild = event.getGuild();
+                            Guild guild = event.getGuild();
                             if (guild != null) {
                                 try {
                                     // 1. Créer le rôle
@@ -660,6 +668,7 @@ public class TeamCommandListener extends ListenerAdapter {
         });
     }
 
+    @SuppressWarnings("null")
     private void showTeamInfo(Team team, InteractionHook hook) {
         try {
             List<Player> members = team.players(api);
@@ -712,6 +721,7 @@ public class TeamCommandListener extends ListenerAdapter {
     }
 
     @Override
+    @SuppressWarnings("null")
     public void onButtonInteraction(ButtonInteractionEvent event) {
         String componentId = event.getComponentId();
         if (!componentId.startsWith("team_invite:")) return;
@@ -767,7 +777,7 @@ public class TeamCommandListener extends ListenerAdapter {
         }
 
         if (action.equals("accept")) {
-            if (!fr.citedesiles.discordbot.DiscordBot.inscriptionsOuvertes) {
+            if (!DiscordBot.inscriptionsOuvertes) {
                 event.editMessage("❌ Les inscriptions sont fermées. Tu ne peux pas accepter cette invitation.").setComponents().queue();
                 return;
             }

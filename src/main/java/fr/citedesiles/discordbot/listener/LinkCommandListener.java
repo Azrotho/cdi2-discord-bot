@@ -1,6 +1,7 @@
 package fr.citedesiles.discordbot.listener;
 
 import fr.citedesiles.coreplugin.CoreCDI;
+import fr.citedesiles.discordbot.DiscordBot;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
@@ -14,10 +15,11 @@ public class LinkCommandListener extends ListenerAdapter {
     }
 
     @Override
+    @SuppressWarnings("null")
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (!event.getName().equals("link")) return;
 
-        if (!fr.citedesiles.discordbot.DiscordBot.inscriptionsOuvertes) {
+        if (!DiscordBot.inscriptionsOuvertes) {
             event.reply("❌ Les inscriptions sont fermées.")
                     .setEphemeral(true).queue();
             return;
