@@ -10,6 +10,7 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
+import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.components.buttons.Button;
 
 import java.awt.Color;
@@ -63,14 +64,30 @@ public class TeamCommandListener extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
+        if (event.getName().equals("endinscription")) {
+            handleEndInscription(event);
+            return;
+        }
+        if (event.getName().equals("verifier")) {
+            handleVerifier(event);
+            return;
+        }
         if (!event.getName().equals("team")) return;
         if (event.getSubcommandName() == null) return;
 
+        String subcommand = event.getSubcommandName();
+        if ((subcommand.equals("create") || subcommand.equals("invite")) && !fr.citedesiles.discordbot.DiscordBot.inscriptionsOuvertes) {
+            event.reply("❌ Les inscriptions sont fermées.")
+                    .setEphemeral(true).queue();
+            return;
+        }
+
         try {
-            switch (event.getSubcommandName()) {
+            switch (subcommand) {
                 case "create" -> handleCreate(event);
                 case "invite" -> handleInvite(event);
                 case "leave" -> handleLeave(event);
+                case "disband" -> handleDisband(event);
                 case "kick" -> handleKick(event);
                 case "transfer" -> handleTransfer(event);
                 case "edit" -> handleEdit(event);
@@ -219,26 +236,60 @@ public class TeamCommandListener extends ListenerAdapter {
             return;
         }
 
+        if (team.leader().equals(player.uuid())) {
+            event.reply("❌ En tant que chef d'équipe, tu ne peux pas quitter l'équipe. Utilise `/team disband` pour dissoudre l'équipe ou `/team transfer` pour désigner un nouveau chef.")
+                    .setEphemeral(true).queue();
+            return;
+        }
+
         event.deferReply(false).queue(hook -> {
             try {
-                if (team.leader().equals(player.uuid())) {
-                    // C'est le chef
-                    List<Player> members = team.players(api);
-                    if (members.size() > 1) {
-                        hook.sendMessage("❌ Tu es le chef de l'équipe. Tu dois désigner un nouveau chef avec `/team transfer` ou exclure les autres membres avec `/team kick` avant de quitter l'équipe.").queue();
-                    } else {
-                        // Dissoudre la team car il est seul
-                        api.setPlayerTeam(player.uuid(), -1);
-                        api.deleteTeam(team.id());
-                        hook.sendMessage("👋 Tu as quitté et dissous l'équipe **" + team.name() + "** car tu en étais le dernier membre.").queue();
-                    }
-                } else {
-                    // Membre normal
-                    api.setPlayerTeam(player.uuid(), -1);
-                    hook.sendMessage("👋 Tu as quitté l'équipe **" + team.name() + "**.").queue();
-                }
+                // Membre normal
+                api.setPlayerTeam(player.uuid(), -1);
+                hook.sendMessage("👋 Tu as quitté l'équipe **" + team.name() + "**.").queue();
             } catch (Exception e) {
                 hook.sendMessage("❌ Une erreur est survenue : " + e.getMessage()).queue();
+            }
+        });
+    }
+
+    private void handleDisband(SlashCommandInteractionEvent event) throws HandledException {
+        Player player = getPlayerOrError(event.getUser().getId(), event);
+        if (player.team() == -1) {
+            event.reply("❌ Tu n'es pas dans une équipe.")
+                    .setEphemeral(true).queue();
+            return;
+        }
+
+        Team team;
+        try {
+            team = api.getTeam(player.team());
+        } catch (Exception e) {
+            event.reply("❌ Impossible de récupérer les informations de ton équipe.")
+                    .setEphemeral(true).queue();
+            return;
+        }
+
+        if (!team.leader().equals(player.uuid())) {
+            event.reply("❌ Seul le chef d'équipe peut dissoudre l'équipe.")
+                    .setEphemeral(true).queue();
+            return;
+        }
+
+        event.deferReply(false).queue(hook -> {
+            try {
+                List<Player> members = team.players(api);
+                for (Player m : members) {
+                    try {
+                        api.setPlayerTeam(m.uuid(), -1);
+                    } catch (Exception e) {
+                        System.err.println("Erreur lors de la réinitialisation de l'équipe du joueur " + m.name() + " : " + e.getMessage());
+                    }
+                }
+                api.deleteTeam(team.id());
+                hook.sendMessage("👋 L'équipe **" + team.name() + "** a été dissoute par son chef.").queue();
+            } catch (Exception e) {
+                hook.sendMessage("❌ Une erreur est survenue lors de la dissolution de l'équipe : " + e.getMessage()).queue();
             }
         });
     }
@@ -476,6 +527,139 @@ public class TeamCommandListener extends ListenerAdapter {
         }
     }
 
+    private void handleVerifier(SlashCommandInteractionEvent event) {
+        OptionMapping nameOrTagOpt = event.getOption("nom_ou_tag");
+        if (nameOrTagOpt == null) {
+            event.reply("❌ Tu dois spécifier le nom ou le tag de l'équipe à vérifier.")
+                    .setEphemeral(true).queue();
+            return;
+        }
+
+        event.deferReply(false).queue(hook -> {
+            try {
+                List<Team> teams = api.getTeams();
+                String query = nameOrTagOpt.getAsString().toLowerCase();
+                Optional<Team> match = teams.stream()
+                        .filter(t -> t.name().toLowerCase().equals(query) || t.tag().toLowerCase().equals(query))
+                        .findFirst();
+
+                if (match.isEmpty()) {
+                    hook.sendMessage("❌ Aucune équipe trouvée avec le nom ou le tag `" + nameOrTagOpt.getAsString() + "`.").queue();
+                    return;
+                }
+
+                Team team = match.get();
+                List<Player> members = team.players(api);
+
+                if (team.staff() == 1) {
+                    hook.sendMessage("❌ L'équipe **" + team.name() + "** est une équipe staff et n'a pas besoin d'être vérifiée.").queue();
+                    return;
+                }
+
+                if (members.size() < 4) {
+                    hook.sendMessage("❌ L'équipe **" + team.name() + "** n'est pas complète (" + members.size() + "/4 membres) et ne peut pas être vérifiée.").queue();
+                    return;
+                }
+
+                api.verifyTeam(team.id());
+                hook.sendMessage("✅ L'équipe **" + team.name() + "** [" + team.tag() + "] a été vérifiée avec succès !").queue();
+            } catch (Exception e) {
+                hook.sendMessage("❌ Une erreur est survenue lors de la vérification : " + e.getMessage()).queue();
+            }
+        });
+    }
+
+    private void handleEndInscription(SlashCommandInteractionEvent event) {
+        // Enregistrer que les inscriptions sont fermées
+        fr.citedesiles.discordbot.DiscordBot.setInscriptionsOuvertes(false);
+
+        event.reply("⏳ Fermeture des inscriptions en cours... Nettoyage de la base de données et configuration des salons d'équipes (1 équipe toutes les 5 secondes)...").queue(interactionHook -> {
+            new Thread(() -> {
+                try {
+                    List<Team> teams = api.getTeams();
+                    int validCount = 0;
+                    int deletedCount = 0;
+
+                    for (Team team : teams) {
+                        List<Player> members = team.players(api);
+                        
+                        // Condition de validité : STAFF OU (FULL ET VERIFIER)
+                        boolean isValid = (team.staff() == 1) || (members.size() >= 4 && team.verification() == 1);
+
+                        if (!isValid) {
+                            // Nettoyer la BD de toutes les teams incomplètes et non vérifiées
+                            for (Player member : members) {
+                                try {
+                                    api.setPlayerTeam(member.uuid(), -1);
+                                } catch (Exception e) {
+                                    System.err.println("Erreur lors de la réinitialisation de l'équipe du joueur " + member.name() + " : " + e.getMessage());
+                                }
+                            }
+                            try {
+                                api.deleteTeam(team.id());
+                                deletedCount++;
+                            } catch (Exception e) {
+                                System.err.println("Erreur lors de la suppression de l'équipe " + team.name() + " : " + e.getMessage());
+                            }
+                        } else {
+                            // Équipe valide : configurer les salons/rôles sur Discord
+                            validCount++;
+                            
+                            net.dv8tion.jda.api.entities.Guild guild = event.getGuild();
+                            if (guild != null) {
+                                try {
+                                    // 1. Créer le rôle
+                                    Color roleColor;
+                                    try {
+                                        roleColor = Color.decode(team.color());
+                                    } catch (Exception e) {
+                                        roleColor = new Color(88, 101, 242); // Blurple
+                                    }
+
+                                    final Color finalColor = roleColor;
+                                    guild.createRole()
+                                        .setName(team.name())
+                                        .setColor(finalColor)
+                                        .queue(role -> {
+                                            // Assigner le rôle aux joueurs de l'équipe
+                                            for (Player member : members) {
+                                                if (member.discordId() != null && !member.discordId().isEmpty()) {
+                                                    guild.retrieveMemberById(member.discordId()).queue(
+                                                        discordMember -> guild.addRoleToMember(discordMember, role).queue(),
+                                                        err -> {}
+                                                    );
+                                                }
+                                            }
+
+                                            // 2. Créer la catégorie privée
+                                            guild.createCategory(team.name())
+                                                .addRolePermissionOverride(guild.getPublicRole().getIdLong(), null, List.of(Permission.VIEW_CHANNEL))
+                                                .addRolePermissionOverride(role.getIdLong(), List.of(Permission.VIEW_CHANNEL), null)
+                                                .queue(category -> {
+                                                    category.createTextChannel("blabla").queue();
+                                                    category.createVoiceChannel("Vocal 1").queue();
+                                                    category.createVoiceChannel("Vocal 2").queue();
+                                                }, err -> System.err.println("Erreur de création de la catégorie pour " + team.name() + " : " + err.getMessage()));
+                                        }, err -> System.err.println("Erreur de création du rôle pour " + team.name() + " : " + err.getMessage()));
+                                } catch (Exception e) {
+                                    System.err.println("Erreur lors du traitement Discord pour l'équipe " + team.name() + " : " + e.getMessage());
+                                }
+                            }
+                            
+                            // Attendre 5 secondes pour respecter le rate limit
+                            Thread.sleep(5000);
+                        }
+                    }
+
+                    String summary = String.format("✅ Inscriptions fermées.\n- Équipes valides configurées : %d\n- Équipes incomplètes/non-vérifiées supprimées : %d", validCount, deletedCount);
+                    interactionHook.sendMessage(summary).queue();
+                } catch (Exception e) {
+                    interactionHook.sendMessage("❌ Une erreur est survenue lors de la fermeture des inscriptions : " + e.getMessage()).queue();
+                }
+            }).start();
+        });
+    }
+
     private void showTeamInfo(Team team, InteractionHook hook) {
         try {
             List<Player> members = team.players(api);
@@ -507,6 +691,9 @@ public class TeamCommandListener extends ListenerAdapter {
 
             String status = team.staff() == 1 ? "🛡️ Staff (Membres illimités)" : "⚔️ Joueurs (Limite de 4 membres)";
             embed.addField("📋 Statut", status, true);
+
+            String verification = team.verification() == 1 ? "✅ Vérifiée" : "❌ Non vérifiée";
+            embed.addField("🔍 Vérification", verification, true);
 
             StringBuilder membersList = new StringBuilder();
             for (Player m : members) {
@@ -582,6 +769,11 @@ public class TeamCommandListener extends ListenerAdapter {
         }
 
         if (action.equals("accept")) {
+            if (!fr.citedesiles.discordbot.DiscordBot.inscriptionsOuvertes) {
+                event.editMessage("❌ Les inscriptions sont fermées. Tu ne peux pas accepter cette invitation.").setComponents().queue();
+                return;
+            }
+
             // Vérifier à nouveau si le joueur est déjà dans une équipe
             try {
                 // Rafraîchir les infos du joueur
@@ -609,7 +801,13 @@ public class TeamCommandListener extends ListenerAdapter {
 
                 // Notifier le chef
                 event.getJDA().retrieveUserById(leaderDiscordId).queue(leader -> {
-                    leader.openPrivateChannel().queue(c -> c.sendMessage("🔔 **" + api.getPlayer(targetPlayerUuid).name() + "** a accepté ton invitation et a rejoint l'équipe **" + team.name() + "** !").queue());
+                    leader.openPrivateChannel().queue(c -> {
+                        String msg = "🔔 **" + api.getPlayer(targetPlayerUuid).name() + "** a accepté ton invitation et a rejoint l'équipe **" + team.name() + "** !";
+                        if (team.staff() != 1 && members.size() == 3 && team.verification() == 0) {
+                            msg += "\n⚠️ Ton équipe est désormais complète (4/4) mais n'est pas encore vérifiée. Pense à ouvrir un ticket sur le Discord du Cripie Club pour faire vérifier ton équipe auprès d'un modérateur !";
+                        }
+                        c.sendMessage(msg).queue();
+                    });
                 }, err -> {});
             } catch (Exception e) {
                 event.reply("❌ Une erreur est survenue lors de l'ajout à l'équipe : " + e.getMessage()).setEphemeral(true).queue();

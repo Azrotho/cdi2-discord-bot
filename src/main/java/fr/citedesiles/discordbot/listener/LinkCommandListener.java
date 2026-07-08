@@ -17,6 +17,12 @@ public class LinkCommandListener extends ListenerAdapter {
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (!event.getName().equals("link")) return;
 
+        if (!fr.citedesiles.discordbot.DiscordBot.inscriptionsOuvertes) {
+            event.reply("❌ Les inscriptions sont fermées.")
+                    .setEphemeral(true).queue();
+            return;
+        }
+
         OptionMapping codeOption = event.getOption("code");
         if (codeOption == null) {
             event.reply("❌ Tu dois fournir le code reçu en jeu avec `/link`.")
