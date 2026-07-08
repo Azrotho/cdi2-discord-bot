@@ -663,7 +663,6 @@ public class TeamCommandListener extends ListenerAdapter {
     private void showTeamInfo(Team team, InteractionHook hook) {
         try {
             List<Player> members = team.players(api);
-            double money = api.getTeamMoney(team.id());
 
             EmbedBuilder embed = new EmbedBuilder();
             embed.setTitle("👥 Équipe " + team.name() + " [" + team.tag() + "]");
@@ -687,9 +686,8 @@ public class TeamCommandListener extends ListenerAdapter {
             }
 
             embed.addField("👑 Chef d'équipe", leaderDiscordMention + " (" + leaderName + ")", true);
-            embed.addField("⭐ Solde de l'équipe", String.format("%.2f Étoiles", money), true);
 
-            String status = team.staff() == 1 ? "🛡️ Staff (Membres illimités)" : "⚔️ Joueurs (Limite de 4 membres)";
+            String status = team.staff() == 1 ? "🛡️ Staff" : "⚔️ Joueurs (4 membres max)";
             embed.addField("📋 Statut", status, true);
 
             String verification = team.verification() == 1 ? "✅ Vérifiée" : "❌ Non vérifiée";
